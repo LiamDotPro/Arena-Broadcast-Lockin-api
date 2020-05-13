@@ -2,40 +2,79 @@ package main
 
 import (
 	"fmt"
-	"github.com/gofiber/fiber"
-	"github.com/gofiber/websocket"
+	"github.com/gin-gonic/gin"
+	"github.com/googollee/go-socket.io"
 	"log"
+	"net/http"
 )
 
-func main() {
-	app := fiber.New()
+func GinMiddleware(allowOrigin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Content-Length, X-CSRF-Token, Token, session, Origin, Host, Connection, Accept-Encoding, Accept-Language, X-Requested-With")
 
-	app.Use(func(c *fiber.Ctx) {
-		c.Locals("Hello", "World")
-		c.Next()
-	})
-
-	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
-		fmt.Println(c.Locals("Hello")) // "World"
-		// Websocket logic...
-		for {
-			mt, msg, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				break
-			}
-			log.Printf("recv: %s", msg)
-			err = c.WriteMessage(mt, msg)
-			if err != nil {
-				log.Println("write:", err)
-				break
-			}
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
 		}
-	}))
 
-	app.Get("/helloWorld", func(ctx *fiber.Ctx) {
-		ctx.Send("Hello Paul")
+		c.Request.Header.Del("Origin")
+
+		c.Next()
+	}
+}
+
+func main() {
+
+
+	server, err := socketio.NewServer(nil)
+
+	router := gin.New()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server.OnConnect("/", func(s socketio.Conn) error {
+		s.SetContext("")
+		fmt.Println("connected:", s.ID())
+		return nil
 	})
 
-	app.Listen(7888) // ws://localhost:3000/ws
+	server.OnEvent("/", "notice", func(s socketio.Conn, msg string) {
+		fmt.Println("notice:", msg)
+		s.Emit("reply", "have "+msg)
+	})
+
+	server.OnEvent("/chat", "msg", func(s socketio.Conn, msg string) string {
+		s.SetContext(msg)
+		return "recv " + msg
+	})
+
+	server.OnEvent("/", "bye", func(s socketio.Conn) string {
+		last := s.Context().(string)
+		s.Emit("bye", last)
+		_ = s.Close()
+		return last
+	})
+
+	server.OnError("/", func(s socketio.Conn, e error) {
+		fmt.Println("meet error:", e)
+	})
+
+	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
+		fmt.Println("closed", reason)
+	})
+
+	go server.Serve()
+	defer server.Close()
+
+	router.Use(GinMiddleware("http://localhost:3000"))
+	router.GET("/socket.io/*any", gin.WrapH(server))
+	router.POST("/socket.io/*any", gin.WrapH(server))
+	router.StaticFS("/public", http.Dir("../asset"))
+	
+	_ = router.Run(":8000")
 }
