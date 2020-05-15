@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/googollee/go-socket.io"
+	"github.com/k0kubun/pp"
 	"log"
 	"net/http"
 )
@@ -27,7 +29,7 @@ func GinMiddleware(allowOrigin string) gin.HandlerFunc {
 }
 
 type socketData struct {
-	Text string `json:"text"`
+	Text string
 }
 
 // err = json.Unmarshal([]byte(msg), &socketData)
@@ -44,21 +46,53 @@ func main() {
 	server.OnConnect("/", func(s socketio.Conn) error {
 		s.SetContext("")
 		fmt.Println("connected:", s.ID())
+		pp.Println(server.Rooms("/"))
 		return nil
 	})
 
+	// Joins someone to a player view
 	server.OnEvent("/", "join", func(s socketio.Conn, key string) error {
 		fmt.Println("Reached here..")
 		return nil
 	})
 
+	// Joins someone to the admin room
+	server.OnEvent("/", "joinAdmin", func(s socketio.Conn) error {
+		fmt.Println("An admin has connected to the control panel..")
+		s.Join("admin")
+		server.BroadcastToRoom("/", "admin", "adminSetup", Lobbies)
+		return nil
+	})
+
 	server.OnError("/", func(s socketio.Conn, e error) {
-		fmt.Println("meet error:", e)
+		// fmt.Println("meet error:", e)
 	})
 
 	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
 		fmt.Println("closed", reason)
 	})
+
+	// Admin Events
+	server.OnEvent("/admin", "createLobby", func(s socketio.Conn, payload string) error {
+
+		// A request for lobby creation has been found.
+		createLobbyPayload := createLobbyPayload{}
+
+		err = json.Unmarshal([]byte(payload), &createLobbyPayload)
+
+		// Append the lobby directly into the global lobby state..
+		Lobbies = append(Lobbies, createLobby(
+			createLobbyPayload.MaxRounds,
+			createLobbyPayload.StartingTeam,
+			createLobbyPayload.Team1Name,
+			createLobbyPayload.Team2Name,
+		))
+
+		server.BroadcastToRoom("/", "control", "newLobbyCreated", "test")
+
+		return nil
+	})
+
 
 	go server.Serve()
 	defer server.Close()
