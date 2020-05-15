@@ -26,8 +26,12 @@ func GinMiddleware(allowOrigin string) gin.HandlerFunc {
 	}
 }
 
-func main() {
+type socketData struct {
+	Text string `json:"text"`
+}
 
+// err = json.Unmarshal([]byte(msg), &socketData)
+func main() {
 
 	server, err := socketio.NewServer(nil)
 
@@ -43,21 +47,9 @@ func main() {
 		return nil
 	})
 
-	server.OnEvent("/", "notice", func(s socketio.Conn, msg string) {
-		fmt.Println("notice:", msg)
-		s.Emit("reply", "have "+msg)
-	})
-
-	server.OnEvent("/chat", "msg", func(s socketio.Conn, msg string) string {
-		s.SetContext(msg)
-		return "recv " + msg
-	})
-
-	server.OnEvent("/", "bye", func(s socketio.Conn) string {
-		last := s.Context().(string)
-		s.Emit("bye", last)
-		_ = s.Close()
-		return last
+	server.OnEvent("/", "join", func(s socketio.Conn, key string) error {
+		fmt.Println("Reached here..")
+		return nil
 	})
 
 	server.OnError("/", func(s socketio.Conn, e error) {
@@ -75,6 +67,6 @@ func main() {
 	router.GET("/socket.io/*any", gin.WrapH(server))
 	router.POST("/socket.io/*any", gin.WrapH(server))
 	router.StaticFS("/public", http.Dir("../asset"))
-	
+
 	_ = router.Run(":8000")
 }
