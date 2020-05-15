@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/googollee/go-socket.io"
-	"github.com/k0kubun/pp"
 	"log"
 	"net/http"
 )
@@ -46,7 +45,6 @@ func main() {
 	server.OnConnect("/", func(s socketio.Conn) error {
 		s.SetContext("")
 		fmt.Println("connected:", s.ID())
-		pp.Println(server.Rooms("/"))
 		return nil
 	})
 
