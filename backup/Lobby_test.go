@@ -1,4 +1,4 @@
-package main
+package backup
 
 import (
 	"github.com/k0kubun/pp"
